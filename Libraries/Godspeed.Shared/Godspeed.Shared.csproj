@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk" InitialTargets="ValidateBuildDependencies">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Godspeed.Shared</AssemblyName>
+    <RootNamespace>Godspeed.Shared</RootNamespace>
+    <NuGetAudit>true</NuGetAudit>
+    <ETS2LASourceRoot Condition="'$(ETS2LASourceRoot)' == ''">$(ETS2LA_SOURCE_ROOT)</ETS2LASourceRoot>
+  </PropertyGroup>
+
+  <Target Name="ValidateBuildDependencies">
+    <Error Condition="'$(ETS2LASourceRoot)' == ''"
+           Text="Set ETS2LASourceRoot to a compatible, writable ETS2LA source checkout." />
+    <Error Condition="'$(ETS2LASourceRoot)' != '' and !Exists('$(ETS2LASourceRoot)\ETS2LA.Game\ETS2LA.Game.csproj')"
+           Text="ETS2LASourceRoot does not contain ETS2LA.Game\ETS2LA.Game.csproj." />
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Shared\ETS2LA.Shared.csproj" Private="false" />
+    <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Game\ETS2LA.Game.csproj" Private="false" />
+    <!-- Optional local build input; native PlayerRadar is not redistributed in Git. -->
+    <EmbeddedResource Include="Native\PlayerRadar.dll" LogicalName="Godspeed.Native.PlayerRadar.dll"
+                      Condition="Exists('Native\PlayerRadar.dll')" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor" InitialTargets="ValidateBuildDependencies">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <AssemblyName>ManualTransmission</AssemblyName>
+    <RootNamespace>Godspeed</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Platforms>x64</Platforms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NuGetAudit>true</NuGetAudit>
+    <GodspeedMajor>2</GodspeedMajor>
+    <GodspeedMinor>1</GodspeedMinor>
+    <GodspeedPatch>0</GodspeedPatch>
+    <VersionPrefix>$(GodspeedMajor).$(GodspeedMinor).$(GodspeedPatch)</VersionPrefix>
+    <Deterministic>true</Deterministic>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <ETS2LASourceRoot Condition="'$(ETS2LASourceRoot)' == ''">$(ETS2LA_SOURCE_ROOT)</ETS2LASourceRoot>
+  </PropertyGroup>
+
+  <Target Name="ValidateBuildDependencies">
+    <Error Condition="'$(ETS2LASourceRoot)' == ''"
+           Text="Set ETS2LASourceRoot to a compatible, writable ETS2LA source checkout." />
+    <Error Condition="'$(ETS2LASourceRoot)' != '' and !Exists('$(ETS2LASourceRoot)\ETS2LA.Game\ETS2LA.Game.csproj')"
+           Text="ETS2LASourceRoot does not contain ETS2LA.Game\ETS2LA.Game.csproj." />
+  </Target>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Build.Tasks.Git" Version="10.0.401" PrivateAssets="all" />
+    <ProjectReference Include="..\..\Libraries\Godspeed.Shared\Godspeed.Shared.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Shared\ETS2LA.Shared.csproj" Private="false" />
+    <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Backend\ETS2LA.Backend.csproj" Private="false" />
+    <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Game\ETS2LA.Game.csproj" Private="false" />
+    <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Logging\ETS2LA.Logging.csproj" Private="false" />
+    <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Overlay\ETS2LA.Overlay.csproj" Private="false" />
+    <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.State\ETS2LA.State.csproj" Private="false" />
+  </ItemGroup>
+
+  <Import Project="GodspeedVersioning.targets" />
+
+  <Target Name="DeployManualTransmissionOutputs" AfterTargets="Build"
+          Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT'
+            and '$(DesignTimeBuild)' != 'true' and '$(GodspeedDeploymentInProgress)' != 'true'">
+    <PropertyGroup>
+      <GodspeedLibraryArtifact>$(MSBuildProjectDirectory)\..\..\Libraries\Godspeed.Shared\bin\$(Platform)\$(Configuration)\net10.0\Godspeed.Shared.dll</GodspeedLibraryArtifact>
+      <GodspeedLibrarySymbols>$(MSBuildProjectDirectory)\..\..\Libraries\Godspeed.Shared\bin\$(Platform)\$(Configuration)\net10.0\Godspeed.Shared.pdb</GodspeedLibrarySymbols>
+    </PropertyGroup>
+    <Error Condition="'$(LocalAppData)' == ''" Text="LocalAppData is required to deploy ManualTransmission." />
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)\..\..\Libraries\Godspeed.Shared\Native\PlayerRadar.dll')"
+           Text="Deployment requires the matching native PlayerRadar.dll build input. A shared library without it could disable radar auto-installation for other Godspeed plugins." />
+    <Error Condition="!Exists('$(GodspeedLibraryArtifact)')" Text="Build Godspeed.Shared before deployment." />
+    <MakeDir Directories="$(LocalAppData)\ETS2LA\current\Libraries;$(LocalAppData)\ETS2LA\current\Plugins" />
+    <Copy SourceFiles="$(GodspeedLibraryArtifact)"
+          DestinationFiles="$(LocalAppData)\ETS2LA\current\Libraries\Godspeed.Shared.dll"
+          OverwriteReadOnlyFiles="true" />
+    <Copy SourceFiles="$(GodspeedLibrarySymbols)"
+          DestinationFiles="$(LocalAppData)\ETS2LA\current\Libraries\Godspeed.Shared.pdb"
+          Condition="Exists('$(GodspeedLibrarySymbols)')" OverwriteReadOnlyFiles="true" />
+    <Copy SourceFiles="$(TargetPath)"
+          DestinationFiles="$(LocalAppData)\ETS2LA\current\Plugins\ManualTransmission.dll"
+          OverwriteReadOnlyFiles="true" />
+    <Copy SourceFiles="$(TargetDir)ManualTransmission.pdb"
+          DestinationFiles="$(LocalAppData)\ETS2LA\current\Plugins\ManualTransmission.pdb"
+          Condition="Exists('$(TargetDir)ManualTransmission.pdb')" OverwriteReadOnlyFiles="true" />
+  </Target>
+</Project>

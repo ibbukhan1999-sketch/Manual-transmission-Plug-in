@@ -228,7 +228,6 @@ public sealed class ManualTransmission : Plugin
     private CancellationTokenSource? workerCancellation;
     private Task? workerTask;
     private Task? pendingWorkerStop;
-    private GodspeedSessionLogger? sessionLog;
     private MemoryMappedFile? controllerMap;
     private MemoryMappedViewAccessor? controllerView;
     private TelemetrySnapshot latestTelemetry = TelemetrySnapshot.Empty;
@@ -294,6 +293,7 @@ public sealed class ManualTransmission : Plugin
         AuthorName = "the Godspeed",
         Version = BuildVersion.InformationalVersion,
         SupportedETS2LA = ">=2026.9.5026",
+        Dependencies = ["godspeed.shared"],
         Tags = ["Transmission", "Telemetry"]
     };
 
@@ -472,7 +472,6 @@ public sealed class ManualTransmission : Plugin
             }
         }
         string message = $"stage={stage};plugin_instance={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)};{detail};memory_brand={current.SelectedBrand};memory_detailed={current.DetailedDiagnosticMode};saved={saved}";
-        sessionLog?.Info("UiProbe", message);
         Logger.Info($"ManualTransmission UI probe: {message}");
     }
 
@@ -528,11 +527,6 @@ public sealed class ManualTransmission : Plugin
 
     public override void OnEnable()
     {
-        if (!DeployDependencies())
-        {
-            Logger.Warn("Godspeed shared dependency installed. Please restart ETS2LA to load the library.");
-            return;
-        }
         StartPluginLogic();
     }
 
@@ -546,8 +540,6 @@ public sealed class ManualTransmission : Plugin
                 StopWorkerAndReleaseResources();
                 if (pendingWorkerStop is { IsCompleted: false })
                     throw new InvalidOperationException("Previous transmission worker is still stopping.");
-                sessionLog?.Dispose();
-                sessionLog = GodspeedSessionLogger.Create("manual_transmission", "ManualTransmission");
                 LogInfo("Version", "Plugin build metadata resolved", BuildVersion.LogSnapshot);
                 workerCancellation = new CancellationTokenSource();
                 ResetRuntimeState();
@@ -568,17 +560,11 @@ public sealed class ManualTransmission : Plugin
                 Events.Current.Unsubscribe<GameTelemetryData>(GameTelemetry.Current.EventString, OnTelemetryReceived);
                 Events.Current.Unsubscribe<ControlEvent>(GameOutput.Current.EventString, OnControlOutputReceived);
                 OverlayHandler.Current.UnregisterWindow(statusWindow);
-                sessionLog?.Dispose();
-                sessionLog = null;
                 base.OnDisable();
                 throw;
             }
         }
     }
-
-    private static bool DeployDependencies()
-        => Godspeed.Bootstrap.GodspeedDependencyBootstrap.Deploy(
-            System.Reflection.Assembly.GetExecutingAssembly());
 
     public override void OnDisable()
     {
@@ -599,8 +585,6 @@ public sealed class ManualTransmission : Plugin
             StopWorkerAndReleaseResources();
             GodspeedIntentHub.ClearTransmission();
             LogInfo("Lifecycle", "Plugin disabled; shift buttons released and controller handles closed");
-            sessionLog?.Dispose();
-            sessionLog = null;
         }
     }
 
@@ -623,8 +607,6 @@ public sealed class ManualTransmission : Plugin
             StopWorkerAndReleaseResources();
             GodspeedIntentHub.ClearTransmission();
             LogInfo("Lifecycle", "Plugin shutdown completed");
-            sessionLog?.Dispose();
-            sessionLog = null;
         }
     }
 
@@ -2304,7 +2286,7 @@ public sealed class ManualTransmission : Plugin
             lastDecisionCode = DecisionCode.None;
         }
         if (changed)
-            sessionLog?.Info("Decision", value);
+            LogInfo("Decision", value);
     }
 
     private enum DecisionCode
@@ -2346,22 +2328,25 @@ public sealed class ManualTransmission : Plugin
             };
             lastDecision = value;
         }
-        sessionLog?.Info("Decision", value);
+        LogInfo("Decision", value);
     }
 
     private void LogInfo(string component, string message, string? telemetrySnapshot = null)
     {
-        sessionLog?.Info(component, message, telemetrySnapshot, $"ManualTransmission: {message}");
+        Logger.Info($"ManualTransmission/{component}: {message}"
+            + (telemetrySnapshot is null ? string.Empty : $"; {telemetrySnapshot}"));
     }
 
     private void LogWarn(string component, string message, string? telemetrySnapshot = null)
     {
-        sessionLog?.Warn(component, message, telemetrySnapshot, $"ManualTransmission: {message}");
+        Logger.Warn($"ManualTransmission/{component}: {message}"
+            + (telemetrySnapshot is null ? string.Empty : $"; {telemetrySnapshot}"));
     }
 
     private void LogError(string component, string message, string? telemetrySnapshot = null)
     {
-        sessionLog?.Error(component, message, telemetrySnapshot, $"ManualTransmission: {message}");
+        Logger.Error($"ManualTransmission/{component}: {message}"
+            + (telemetrySnapshot is null ? string.Empty : $"; {telemetrySnapshot}"));
     }
 
     private static ControllerLayout CalculateControllerLayout()

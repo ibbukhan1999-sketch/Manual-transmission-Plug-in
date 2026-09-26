@@ -1,0 +1,373 @@
+@page "/plugins/adjustments/godspeed.manualtransmission"
+@using Godspeed
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using System.Globalization
+@implements IAsyncDisposable
+
+<style>
+    .godspeed-engine-select {
+        color-scheme: dark;
+        background-color: #262626;
+        color: #fff;
+    }
+
+    .godspeed-engine-select option,
+    .godspeed-engine-select optgroup {
+        background-color: #262626;
+        color: #fff;
+    }
+
+    .godspeed-engine-select option:checked {
+        background-color: #383838;
+        color: #fff;
+    }
+
+    .godspeed-engine-picker {
+        position: relative;
+        width: 100%;
+    }
+
+    .godspeed-engine-picker-button,
+    .godspeed-engine-picker-option {
+        width: 100%;
+        padding: .45rem .6rem;
+        color: #eee;
+        background: #262626;
+        text-align: left;
+    }
+
+    .godspeed-engine-picker-button {
+        border: 1px solid #555;
+        border-radius: .35rem;
+    }
+
+    .godspeed-engine-picker-list {
+        position: absolute;
+        z-index: 20;
+        top: 100%;
+        left: 0;
+        right: 0;
+        max-height: 20rem;
+        overflow-y: auto;
+        background: #262626;
+        border: 1px solid #555;
+        box-shadow: 0 6px 16px #0008;
+    }
+
+    .godspeed-engine-picker-option:hover,
+    .godspeed-engine-picker-option:focus-visible,
+    .godspeed-engine-picker-option[aria-selected="true"] {
+        background: #383838;
+    }
+
+    .godspeed-missing-value {
+        color: #ff6b6b;
+    }
+
+    .godspeed-config-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: .65rem .75rem;
+        background: #262626;
+        border-radius: .5rem;
+    }
+
+</style>
+
+<div class="flex flex-col w-108 m-5 ml-8 gap-6">
+    <div>
+        <p class="text-lg font-semibold">Manual Transmission</p>
+        <p class="description">Configure automatic shifting and the engine specification used by the transmission.</p>
+    </div>
+
+    @if (plugin is null || settings is null)
+    {
+        <p>ManualTransmission is not loaded. Enable the plugin and reload this page.</p>
+        <button class="button button-small w-fit" @onclick="Refresh">Refresh</button>
+    }
+    else
+    {
+        var configuration = plugin.GetConfigurationModeSnapshot();
+        <GodspeedSwitch Title="Automatic sequential shifting"
+                Description="Automatically shift using the selected engine specification."
+                Value="@settings.AutomaticShiftingEnabled"
+                ValueChanged="OnShiftingChanged" />
+
+        <GodspeedSwitch Title="Detailed Diagnostic Mode"
+                Description="Show the full telemetry and powertrain overlay."
+                Value="@settings.DetailedDiagnosticMode"
+                ValueChanged="OnDiagnosticModeChanged" />
+
+        <div class="flex flex-col gap-2">
+            <GodspeedSwitch Title="Configuration Mode"
+                    Description="Calibrate engine values marked as estimated."
+                    Value="@configurationModeActive"
+                    Disabled="@(!configuration.NeedsConfiguration)"
+                    ValueChanged="OnConfigurationModeChanged" />
+
+            @if (configurationModeActive && detailedModeActive && configuration.NeedsConfiguration)
+            {
+                <div class="flex flex-col gap-2">
+                    <p class="font-semibold">Before running either test</p>
+                    <p class="description">Test 1 (Stationary): Ensure the truck is stopped with the parking brake applied and the gearbox in Neutral.</p>
+                    <p class="description">Test 2 (Rolling Dyno): Ensure the truck is on a completely flat surface with a minimum 15-ton loaded trailer attached. Select a live-verified near-1:1 gear; calibration aborts if the gear changes.</p>
+                    <p class="description">The rolling RPM band is an acceleration-derived estimate, not a measured torque curve. Missing values use playable fallbacks until a test succeeds.</p>
+
+                    <p class="description">Open the in-game Detailed Diagnostic overlay's Configuration tab to start a test.</p>
+                    <div class="godspeed-config-row">
+                        <div>
+                            <span style="color: @(configuration.NeedsLimitTest ? "#ff6666" : "#63d68a"); opacity: @BreathingOpacityString">@(configuration.NeedsLimitTest ? "⚠" : "●")</span>
+                            <span> rpm_limit — @(configuration.LimitMeasured ? "Session-measured" : configuration.NeedsLimitTest ? "AI fallback" : "Game-driven")</span>
+                            <p class="description">Current session value: @configuration.EffectiveRpmLimit RPM</p>
+                        </div>
+                    </div>
+
+                    <div class="godspeed-config-row">
+                        <div>
+                            <span style="color: @(configuration.NeedsPowerBandTest ? "#ff6666" : "#63d68a"); opacity: @BreathingOpacityString">@(configuration.NeedsPowerBandTest ? "⚠" : "●")</span>
+                            <span> rpm_range_low / rpm_range_high — @(configuration.PowerBandMeasured ? "Session-estimated" : configuration.NeedsPowerBandTest ? "AI fallback" : "Game-driven")</span>
+                            <p class="description">Current session values: @configuration.EffectiveRpmRangeLow–@configuration.EffectiveRpmRangeHigh RPM</p>
+                        </div>
+                    </div>
+                    @if (configuration.RunningTest != ConfigurationTestKind.None)
+                    {
+                        <p>@configuration.RunningTest: @configuration.SecondsRemaining.ToString("F1", CultureInfo.InvariantCulture)s remaining</p>
+                    }
+                    <p class="description">@configuration.Message</p>
+                </div>
+            }
+        </div>
+
+        <div class="flex flex-col gap-2">
+            <label for="manual-transmission-brand">SelectedBrand</label>
+            <select id="manual-transmission-brand" class="godspeed-engine-select" value="@settings.SelectedBrand" @oninput="OnBrandSelected" @onchange="OnBrandSelected" @onclick="OnBrandClicked">
+                @foreach (string brand in ManualTransmission.AvailableEngineBrands)
+                {
+                    <option value="@brand">@brand</option>
+                }
+            </select>
+        </div>
+
+        @if (settings.SelectedBrand != "Custom / Unspecified")
+        {
+            <div class="flex flex-col gap-2">
+                <label id="manual-transmission-horsepower-label">SelectedHorsepower</label>
+                <div class="godspeed-engine-picker" @onkeydown="OnEnginePickerKeyDown">
+                    <button id="manual-transmission-horsepower" type="button"
+                            class="godspeed-engine-picker-button"
+                            aria-labelledby="manual-transmission-horsepower-label"
+                            aria-haspopup="listbox" aria-expanded="@enginePickerOpen"
+                            @onclick="ToggleEnginePicker">
+                        @if (settings.SelectedProfileIndex >= 0
+                            && settings.SelectedProfileIndex < EngineCatalog.Profiles.Count
+                            && EngineCatalog.Profiles[settings.SelectedProfileIndex].Brand == settings.SelectedBrand)
+                        {
+                            var selectedEngine = EngineCatalog.Profiles[settings.SelectedProfileIndex];
+                            var missing = ManualTransmission.GetMissingEngineFields(settings.SelectedProfileIndex);
+                            <span>@selectedEngine.Horsepower HP · @selectedEngine.TorqueNm Nm · </span>
+                            <span class="@(missing.RpmLimit ? "godspeed-missing-value" : null)">@selectedEngine.RpmLimit</span><span> RPM · </span>
+                            <span class="@(missing.RpmRangeLow ? "godspeed-missing-value" : null)">@selectedEngine.RpmRangeLow</span><span>–</span><span class="@(missing.RpmRangeHigh ? "godspeed-missing-value" : null)">@selectedEngine.RpmRangeHigh</span><span> RPM</span>
+                        }
+                        else
+                        {
+                            <span>Select an engine specification</span>
+                        }
+                    </button>
+                    @if (enginePickerOpen)
+                    {
+                        <div class="godspeed-engine-picker-list" role="listbox" aria-labelledby="manual-transmission-horsepower-label">
+                            @foreach (var profile in GetFilteredEngines(settings.SelectedBrand))
+                            {
+                                var missing = ManualTransmission.GetMissingEngineFields(profile.Index);
+                                <button type="button" role="option"
+                                        aria-selected="@(settings.SelectedProfileIndex == profile.Index ? "true" : "false")"
+                                        class="godspeed-engine-picker-option"
+                                        @onclick="() => SelectProfileAsync(profile.Index)">
+                                    <span>@profile.Engine.Horsepower HP · @profile.Engine.TorqueNm Nm · </span>
+                                    <span class="@(missing.RpmLimit ? "godspeed-missing-value" : null)">@profile.Engine.RpmLimit</span><span> RPM · </span>
+                                    <span class="@(missing.RpmRangeLow ? "godspeed-missing-value" : null)">@profile.Engine.RpmRangeLow</span><span>–</span><span class="@(missing.RpmRangeHigh ? "godspeed-missing-value" : null)">@profile.Engine.RpmRangeHigh</span><span> RPM</span>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="flex flex-col gap-2">
+                <label>Custom horsepower <input type="number" min="1" max="5000" @bind="customHorsepower" /></label>
+                <label>Custom torque (Nm) <input type="number" min="1" max="20000" @bind="customTorqueNm" /></label>
+                <label>RPM limit <input type="number" min="1" max="10000" @bind="customRpmLimit" /></label>
+                <label>Torque range low (RPM) <input type="number" min="51" max="10000" @bind="customRpmRangeLow" /></label>
+                <label>Torque range high (RPM) <input type="number" min="51" max="10000" @bind="customRpmRangeHigh" /></label>
+                <button class="button button-small w-fit" @onclick="SaveCustomEngine">Save custom engine</button>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private ManualTransmission? plugin;
+    private ManualTransmissionAdjustmentSettings? settings;
+    private int customHorsepower;
+    private int customTorqueNm;
+    private int customRpmLimit;
+    private int customRpmRangeLow;
+    private int customRpmRangeHigh;
+    private bool configurationModeActive;
+    private bool detailedModeActive;
+    private bool enginePickerOpen;
+    private readonly CancellationTokenSource animationCancellation = new();
+    private Task? animationTask;
+
+    private string BreathingOpacityString => (.35d + .65d * (.5d +
+        .5d * Math.Sin(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000d * 2.6d)))
+        .ToString("F2", CultureInfo.InvariantCulture);
+
+    private static IEnumerable<(int Index, EngineSpec Engine)> GetFilteredEngines(string brand) =>
+        EngineCatalog.Profiles
+            .Select((engine, index) => (Index: index, Engine: engine))
+            .Where(profile => profile.Engine.Brand == brand)
+            .OrderBy(profile => profile.Engine.Horsepower);
+
+    private void LogUiHandlerProbe(string stage, string requested, bool readSavedFile = false)
+    {
+        string detail = $"component_instance={System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)};requested={requested}";
+        if (plugin is null)
+            ETS2LA.Logging.Logger.Info($"ManualTransmission UI probe: stage={stage};plugin_instance=null;{detail}");
+        else
+            plugin.LogUiProbe(stage, detail, readSavedFile);
+    }
+
+    protected override void OnInitialized()
+    {
+        Refresh();
+        animationTask = AnimateConfigurationStatusAsync(animationCancellation.Token);
+    }
+
+    private async Task AnimateConfigurationStatusAsync(CancellationToken cancellation)
+    {
+        using PeriodicTimer timer = new(TimeSpan.FromMilliseconds(100));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellation))
+            {
+                if (configurationModeActive)
+                    await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (configurationModeActive)
+            plugin?.StopConfigurationMode();
+        animationCancellation.Cancel();
+        if (animationTask is not null)
+            await animationTask;
+        animationCancellation.Dispose();
+    }
+
+    private void OnConfigurationModeChanged(bool enabled)
+    {
+        if (plugin?.GetConfigurationModeSnapshot().NeedsConfiguration != true)
+            return;
+        configurationModeActive = enabled;
+        if (configurationModeActive)
+            detailedModeActive = true;
+        else
+            plugin?.StopConfigurationMode();
+    }
+
+    private void Refresh()
+    {
+        plugin = ETS2LA.Backend.PluginBackend.Current.PluginHandler?
+            .LoadedPlugins.OfType<ManualTransmission>().FirstOrDefault();
+        settings = plugin?.GetAdjustmentSettings();
+        if (settings is null)
+            return;
+        ConfigurationModeSnapshot configuration = plugin!.GetConfigurationModeSnapshot();
+        if (configuration.LimitMeasured || configuration.PowerBandMeasured)
+        {
+            configurationModeActive = true;
+            detailedModeActive = true;
+        }
+        customHorsepower = settings.CustomHorsepower;
+        customTorqueNm = settings.CustomTorqueNm;
+        customRpmLimit = settings.CustomRpmLimit;
+        customRpmRangeLow = settings.CustomRpmRangeLow;
+        customRpmRangeHigh = settings.CustomRpmRangeHigh;
+    }
+
+    private void OnShiftingChanged(bool enabled)
+    {
+        plugin?.SetAutomaticShifting(enabled);
+        Refresh();
+    }
+
+    private void OnBrandClicked() =>
+        LogUiHandlerProbe("Razor.Brand.Click", settings?.SelectedBrand ?? "<null>");
+
+    private async Task OnDiagnosticModeChanged(bool enabled)
+    {
+        LogUiHandlerProbe("Razor.Detailed.Enter", enabled.ToString());
+        if (plugin?.GetAdjustmentSettings().DetailedDiagnosticMode != enabled)
+        {
+            plugin?.SetDetailedDiagnosticMode(enabled);
+            plugin?.SaveSettings();
+        }
+        Refresh();
+        LogUiHandlerProbe("Razor.Detailed.AfterSave", enabled.ToString(), true);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnBrandSelected(ChangeEventArgs args)
+    {
+        LogUiHandlerProbe("Razor.Brand.Enter", args.Value?.ToString() ?? "<null>");
+        if (args.Value is not string brand)
+            return;
+        enginePickerOpen = false;
+        if (plugin?.GetAdjustmentSettings().SelectedBrand != brand)
+        {
+            plugin?.SetSelectedBrand(brand);
+            plugin?.SaveSettings();
+        }
+        Refresh();
+        configurationModeActive = plugin?.GetConfigurationModeSnapshot().NeedsConfiguration == true;
+        LogUiHandlerProbe("Razor.Brand.AfterSave", brand, true);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleEnginePicker() => enginePickerOpen = !enginePickerOpen;
+
+    private void OnEnginePickerKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+            enginePickerOpen = false;
+    }
+
+    private async Task SelectProfileAsync(int index)
+    {
+        enginePickerOpen = false;
+        plugin?.SetSelectedProfileIndex(index);
+        Refresh();
+        configurationModeActive = plugin?.GetConfigurationModeSnapshot().NeedsConfiguration == true;
+        if (configurationModeActive)
+        {
+            detailedModeActive = true;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void SaveCustomEngine()
+    {
+        plugin?.SetCustomEngine(customHorsepower, customTorqueNm, customRpmLimit,
+            customRpmRangeLow, customRpmRangeHigh);
+        Refresh();
+    }
+}

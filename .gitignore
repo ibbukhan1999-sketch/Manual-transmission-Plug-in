@@ -1,0 +1,22 @@
+# .NET and IDE outputs
+**/bin/
+**/obj/
+.vs/
+.vscode/
+*.user
+*.suo
+*.rsuser
+
+# Runtime data and local settings
+.session_logs/
+**/.session_logs/
+*.log
+*.settings.json
+
+# Do not commit locally built or downloaded binaries
+*.dll
+*.pdb
+*.exe
+*.deps.json
+*.runtimeconfig.json
+*.zip

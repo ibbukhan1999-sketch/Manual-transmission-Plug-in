@@ -21,8 +21,5 @@
   <ItemGroup>
     <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Shared\ETS2LA.Shared.csproj" Private="false" />
     <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.Game\ETS2LA.Game.csproj" Private="false" />
-    <!-- Optional local build input; native PlayerRadar is not redistributed in Git. -->
-    <EmbeddedResource Include="Native\PlayerRadar.dll" LogicalName="Godspeed.Native.PlayerRadar.dll"
-                      Condition="Exists('Native\PlayerRadar.dll')" />
   </ItemGroup>
 </Project>

@@ -14,6 +14,8 @@ using ETS2LA.State;
 using Hexa.NET.ImGui;
 using Godspeed.Diagnostics;
 using Godspeed.Shared;
+using GodspeedIntentHub = Godspeed.Shared.GodspeedIntentHub;
+using GodspeedIntentSnapshot = Godspeed.Shared.GodspeedIntentSnapshot;
 
 namespace Godspeed;
 

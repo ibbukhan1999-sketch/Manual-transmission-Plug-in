@@ -21,4 +21,4 @@ if ($LASTEXITCODE -ne 0) { throw 'Godspeed.Shared build failed.' }
 & dotnet build $pluginProject @buildArgs
 if ($LASTEXITCODE -ne 0) { throw 'ManualTransmission build or deployment failed.' }
 
-Write-Output 'Godspeed.Shared and ManualTransmission built and deployed separately. Restart ETS2LA before testing.'
+Write-Output 'ManualTransmission deployed. The radar-free Godspeed.Shared library was installed only if no library was already present. Restart ETS2LA before testing.'

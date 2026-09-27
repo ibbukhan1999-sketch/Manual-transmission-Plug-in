@@ -273,15 +273,18 @@
         animationCancellation.Dispose();
     }
 
-    private void OnConfigurationModeChanged(bool enabled)
+    private async Task OnConfigurationModeChanged(bool enabled)
     {
         if (plugin?.GetConfigurationModeSnapshot().NeedsConfiguration != true)
             return;
         configurationModeActive = enabled;
-        if (configurationModeActive)
-            detailedModeActive = true;
+        if (enabled)
+            await OnDiagnosticModeChanged(true);
         else
-            plugin?.StopConfigurationMode();
+        {
+            plugin.StopConfigurationMode();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private void Refresh()
@@ -291,11 +294,11 @@
         settings = plugin?.GetAdjustmentSettings();
         if (settings is null)
             return;
+        detailedModeActive = settings.DetailedDiagnosticMode;
         ConfigurationModeSnapshot configuration = plugin!.GetConfigurationModeSnapshot();
         if (configuration.LimitMeasured || configuration.PowerBandMeasured)
         {
             configurationModeActive = true;
-            detailedModeActive = true;
         }
         customHorsepower = settings.CustomHorsepower;
         customTorqueNm = settings.CustomTorqueNm;
@@ -338,7 +341,7 @@
             plugin?.SaveSettings();
         }
         Refresh();
-        configurationModeActive = plugin?.GetConfigurationModeSnapshot().NeedsConfiguration == true;
+        configurationModeActive = false;
         LogUiHandlerProbe("Razor.Brand.AfterSave", brand, true);
         await InvokeAsync(StateHasChanged);
     }
@@ -356,11 +359,7 @@
         enginePickerOpen = false;
         plugin?.SetSelectedProfileIndex(index);
         Refresh();
-        configurationModeActive = plugin?.GetConfigurationModeSnapshot().NeedsConfiguration == true;
-        if (configurationModeActive)
-        {
-            detailedModeActive = true;
-        }
+        configurationModeActive = false;
         await InvokeAsync(StateHasChanged);
     }
 

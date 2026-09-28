@@ -9,12 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <NuGetAudit>true</NuGetAudit>
-    <GodspeedMajor>2</GodspeedMajor>
-    <GodspeedMinor>1</GodspeedMinor>
-    <GodspeedPatch>0</GodspeedPatch>
-    <VersionPrefix>$(GodspeedMajor).$(GodspeedMinor).$(GodspeedPatch)</VersionPrefix>
     <Deterministic>true</Deterministic>
-    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ETS2LASourceRoot Condition="'$(ETS2LASourceRoot)' == ''">$(ETS2LA_SOURCE_ROOT)</ETS2LASourceRoot>
   </PropertyGroup>
 
@@ -27,7 +22,6 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Microsoft.Build.Tasks.Git" Version="10.0.401" PrivateAssets="all" />
     <ProjectReference Include="..\..\Libraries\Godspeed.Shared\Godspeed.Shared.csproj">
       <Private>false</Private>
     </ProjectReference>
@@ -39,7 +33,6 @@
     <ProjectReference Include="$(ETS2LASourceRoot)\ETS2LA.State\ETS2LA.State.csproj" Private="false" />
   </ItemGroup>
 
-  <Import Project="GodspeedVersioning.targets" />
 
   <Target Name="DeployManualTransmissionOutputs" AfterTargets="Build"
           Condition="'$(Configuration)' == 'Release' and '$(OS)' == 'Windows_NT'

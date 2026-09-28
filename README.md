@@ -75,6 +75,17 @@ In PowerShell, from this repository root:
 
 That script builds the shared library first, then Manual Transmission. A successful Release build copies `ManualTransmission.dll`/`.pdb` to `Plugins` and installs the lighter `Godspeed.Shared.dll`/`.pdb` in `Libraries` **only if no shared library is already installed**. It will not overwrite a full-suite library used by other Godspeed plugins. Close ETS2LA and restart it after installing a shared library. Build outputs under `bin/` and `obj/` are not release packages.
 
+On Linux, build the two projects with `dotnet` instead; the Windows deployment
+step is skipped:
+
+```bash
+dotnet build Libraries/Godspeed.Shared/Godspeed.Shared.csproj -c Release -p:Platform=x64 -p:ETS2LASourceRoot=/path/to/ETS2LA-source
+dotnet build Plugins/ManualTransmission/ManualTransmission.csproj -c Release -p:Platform=x64 -p:ETS2LASourceRoot=/path/to/ETS2LA-source
+```
+
+The plugin's visible version comes from its `PluginInformation.Version` field.
+No custom build-number stamp or PowerShell target is needed to compile it.
+
 ### Does Manual Transmission need PlayerRadar?
 
 **No—not to drive or shift gears.** Manual Transmission uses `Godspeed.Shared.dll` for driving-intent sharing and controller compatibility, but does not read radar targets or need `PlayerRadar.dll` at runtime.

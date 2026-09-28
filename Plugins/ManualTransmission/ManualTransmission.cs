@@ -12,7 +12,6 @@ using ETS2LA.Overlay;
 using ETS2LA.Shared;
 using ETS2LA.State;
 using Hexa.NET.ImGui;
-using Godspeed.Diagnostics;
 using Godspeed.Shared;
 using GodspeedIntentHub = Godspeed.Shared.GodspeedIntentHub;
 using GodspeedIntentSnapshot = Godspeed.Shared.GodspeedIntentSnapshot;
@@ -22,10 +21,8 @@ namespace Godspeed;
 [SupportedOSPlatform("windows")]
 public sealed class ManualTransmission : Plugin
 {
-    private static readonly GodspeedBuildVersion BuildVersion =
-        GodspeedBuildVersion.Read(typeof(ManualTransmission).Assembly);
-    private static readonly string VersionHeading =
-        $"Manual Transmission v{BuildVersion.InformationalVersion.Split('+', 2)[0]}";
+    private const string PluginVersion = "2.1.1";
+    private const string VersionHeading = "Manual Transmission v" + PluginVersion;
     private const string PluginId = "godspeed.manualtransmission";
     private const string StabilityCruiseControlChannelId = "godspeed.hsscc.throttle";
     private const string StockCruiseControlChannelId = "AdaptiveCruiseControl.Acceleration";
@@ -248,6 +245,9 @@ public sealed class ManualTransmission : Plugin
     private int expectedGearAfterShift;
     private bool confirmedShiftCooldownApplied;
     private DateTime shiftTransitionStartedAt = DateTime.MinValue;
+    private DateTime lastUpshiftAt = DateTime.MinValue;
+    private int lastUpshiftTargetGear;
+    private float lastUpshiftLandingRpm;
     private DateTime directFirstGearAttemptedAt = DateTime.MinValue;
     private float learnedIdleRpm;
     private float previousSpeed;
@@ -293,7 +293,7 @@ public sealed class ManualTransmission : Plugin
         Id = PluginId,
         Description = "Telemetry-driven sequential shifting with selectable engine specifications",
         AuthorName = "the Godspeed",
-        Version = BuildVersion.InformationalVersion,
+        Version = PluginVersion,
         SupportedETS2LA = ">=2026.9.5026",
         Dependencies = ["godspeed.shared"],
         Tags = ["Transmission", "Telemetry"]
@@ -542,7 +542,6 @@ public sealed class ManualTransmission : Plugin
                 StopWorkerAndReleaseResources();
                 if (pendingWorkerStop is { IsCompleted: false })
                     throw new InvalidOperationException("Previous transmission worker is still stopping.");
-                LogInfo("Version", "Plugin build metadata resolved", BuildVersion.LogSnapshot);
                 workerCancellation = new CancellationTokenSource();
                 ResetRuntimeState();
                 GodspeedIntentHub.PublishTransmission(true);
@@ -1122,6 +1121,21 @@ public sealed class ManualTransmission : Plugin
             && telemetry.EngineRpm < downshiftRpm
             && (latestSpeedRate < -.05f || telemetry.LongitudinalAcceleration < -.25f))
         {
+            // The first wide-ratio upshift can land just below the catalog's
+            // downshift boundary. Do not undo a successful shift on that
+            // transient alone; wait for real lugging or sustained speed loss.
+            bool recoveringFromUpshift = currentGear == lastUpshiftTargetGear
+                && lastUpshiftAt != DateTime.MinValue
+                && telemetry.EngineRpm < downshiftRpm + 75f
+                && telemetry.EngineRpm >= Math.Max(telemetry.EngineRpmIdle + 175f,
+                    lastUpshiftLandingRpm * .85f)
+                && (now - lastUpshiftAt < TimeSpan.FromSeconds(1.5)
+                    || latestSpeedRate > -.5f);
+            if (recoveringFromUpshift)
+            {
+                SetDecision("Holding post-upshift gear while RPM and road speed settle");
+                return;
+            }
             int downshiftTargetGear = currentGear - 1;
             float predictedDownshiftRpm = PredictDownshiftLandingRpm(telemetry, currentGear, downshiftTargetGear);
             if (!IsApprovedDownshift(predictedDownshiftRpm, activeEngine))
@@ -1306,6 +1320,18 @@ public sealed class ManualTransmission : Plugin
             shiftTransitionStartedAt = now;
             Volatile.Write(ref expectedGearAfterShift, expectedGear);
             Volatile.Write(ref shiftTransitionActive, 1);
+            if (command == ShiftCommand.Up && telemetry.CurrentGear > 0)
+            {
+                lastUpshiftAt = now;
+                lastUpshiftTargetGear = expectedGear;
+                lastUpshiftLandingRpm = predictedLandingRpm;
+            }
+            else
+            {
+                lastUpshiftAt = DateTime.MinValue;
+                lastUpshiftTargetGear = 0;
+                lastUpshiftLandingRpm = 0f;
+            }
         }
         // Close the torque gate in the same synchronous call that wrote the
         // shift byte; waiting for the next 50 Hz publication is unsafe.
@@ -1580,6 +1606,9 @@ public sealed class ManualTransmission : Plugin
         confirmedShiftCooldownApplied = false;
         activeShift = ShiftCommand.None;
         shiftTransitionStartedAt = DateTime.MinValue;
+        lastUpshiftAt = DateTime.MinValue;
+        lastUpshiftTargetGear = 0;
+        lastUpshiftLandingRpm = 0f;
         directFirstGearAttemptedAt = DateTime.MinValue;
         Volatile.Write(ref shiftTransitionActive, 0);
         Volatile.Write(ref expectedGearAfterShift, 0);
